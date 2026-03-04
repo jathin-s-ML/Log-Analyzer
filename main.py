@@ -12,8 +12,8 @@ def main():
     print("""
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║        Error Log Analyzer Agent                          ║
-║        Powered by GitHub MCP + AWS Bedrock Claude        ║
+║               Log Analyzer Agent                          ║
+║         GitHub MCP + AWS Bedrock Claude                   ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
     """)
