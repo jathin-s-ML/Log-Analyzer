@@ -1,0 +1,11 @@
+repository: maplelabs/ai-sre-ops
+
+error_log: |
+  Traceback (most recent call last):
+    File "backend/src/server/main.py", line 45, in startup_event
+      await initialize_services()
+    File "backend/src/server/apis_v1/webhooks.py", line 245, in grafana_webhook
+      triage_job_id = enqueue_triage_job(
+    File "backend/src/server/apis_v1/webhooks.py", line 250, in grafana_webhook
+      new_triage.job_id = triage_job_id
+  AttributeError: 'NoneType' object has no attribute 'job_id'
