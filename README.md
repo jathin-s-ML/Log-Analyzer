@@ -337,6 +337,7 @@ Add null check before accessing user object...
    - Deep analysis with code context
    - Generates detailed recommendations
 
+```
 ## 📁 Project Structure
 
 ```
@@ -491,6 +492,3 @@ MIT
 - **Anthropic** - For Claude Haiku 4.5 model
 
 ---
-
-<sub>*Built with ❤️ using LLM-first architecture*</sub>
-
