@@ -48,29 +48,62 @@ error_log: |
         
         print(f"   Repository: {input_data.repository}")
         
-        # Step 2: Parse error log
-        print("\n🔍 Parsing error log...")
+        # Step 2: Let Claude understand the error (LLM-First Approach!)
+        print("\n🤖 Claude is analyzing the error type and determining strategy...")
+        error_understanding = self.bedrock_client.understand_error(input_data.error_log)
+
+        print(f"   ✓ Error Type: {error_understanding.error_type}")
+        print(f"   ✓ Severity: {error_understanding.severity}")
+        print(f"   ✓ Language: {error_understanding.language or 'Unknown'}")
+        print(f"   ✓ Has File Location: {error_understanding.has_file_location}")
+        print(f"   ✓ Needs Code: {error_understanding.needs_code}")
+
+        # Step 3: Fetch code based on Claude's understanding
+        code_content = None
+        file_path = "unknown"
+        line_number = 0
+
+        if error_understanding.has_file_location and error_understanding.file_path:
+            # Traditional flow: We have exact file location
+            print(f"\n📥 Fetching code from: {error_understanding.file_path}")
+            file_path = error_understanding.file_path
+            line_number = error_understanding.line_number or 0
+
+            code_content = self.mcp_client.get_file_contents(
+                repository=input_data.repository,
+                file_path=file_path,
+                line_start=max(1, line_number - 10),
+                line_end=line_number + 10
+            )
+
+            if not code_content:
+                print("❌ Failed to fetch code from repository")
+                self.mcp_client.close()
+                return False
+
+            print(f"   ✓ Fetched: {file_path}:{line_number}")
+
+        elif error_understanding.needs_code and error_understanding.search_strategy:
+            # New flow: Search for code
+            print(f"\n🔍 Searching for code: {error_understanding.search_strategy}")
+            print(f"   Keywords: {', '.join(error_understanding.search_keywords)}")
+
+            code_content = self.mcp_client.search_and_fetch(
+                repository=input_data.repository,
+                search_query=error_understanding.search_strategy,
+                keywords=error_understanding.search_keywords
+            )
+
+            if code_content:
+                print("   ✓ Found relevant code via search")
+            else:
+                print("   ⚠️  No code found via search, will analyze log only")
+        else:
+            # No code needed - analyze log only
+            print("\n📝 No code fetch needed - analyzing log directly")
+
+        # Parse error for compatibility (simplified now)
         parsed_error = self.error_parser.parse(input_data.error_log)
-        print(f"   Error Type: {parsed_error.error_type}")
-        print(f"   Language: {parsed_error.language or 'Unknown'}")
-        print(f"   Stack Frames: {len(parsed_error.stack_trace)}")
-        
-        if not parsed_error.stack_trace:
-            print("⚠️  No stack trace found, using generic analysis")
-        
-        # Step 3: Fetch code from GitHub (using GitHub API directly)
-        print("\n📥 Fetching code from GitHub...")
-        code_content, file_path, line_number = self._fetch_relevant_code(
-            input_data.repository,
-            parsed_error
-        )
-        
-        if not code_content:
-            print("❌ Failed to fetch code from repository")
-            self.mcp_client.close()
-            return False  # Return False to indicate failure
-        
-        print(f"   Fetched: {file_path}:{line_number}")
         
         # Step 5: Analyze with Claude
         print("\n🤖 Analyzing with AWS Bedrock Claude...")

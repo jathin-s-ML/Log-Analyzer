@@ -6,7 +6,7 @@ import os
 from typing import Optional
 from botocore.config import Config
 from config import settings
-from models import ParsedError, AnalysisResult
+from models import ParsedError, AnalysisResult, ErrorUnderstanding
 
 
 class BedrockClient:
@@ -23,6 +23,164 @@ class BedrockClient:
 
         # Set the bearer token as environment variable for boto3
         os.environ['AWS_BEARER_TOKEN_BEDROCK'] = self.api_key
+
+        # Configure Bedrock client with timeouts
+        bedrock_config = Config(
+            read_timeout=120,
+            connect_timeout=60,
+            retries={
+                'max_attempts': 3,
+                'mode': 'adaptive'
+            }
+        )
+
+        # Initialize boto3 Bedrock client
+        self.client = boto3.client(
+            service_name='bedrock-runtime',
+            region_name=self.region,
+            config=bedrock_config
+        )
+
+    def understand_error(self, error_log: str) -> ErrorUnderstanding:
+        """
+        First LLM call: Let Claude understand the error and determine analysis strategy.
+
+        This is the key to making the agent universal - Claude decides what to do!
+        """
+        prompt = f"""You are an expert at analyzing error logs. Examine this log and determine the best analysis strategy.
+
+**Error Log:**
+```
+{error_log}
+```
+
+Analyze this error and respond in JSON format with these fields:
+
+{{
+    "error_type": "Type of error (e.g., AttributeError, HTTP422Error, DatabaseError, etc.)",
+    "error_message": "Brief description of what went wrong",
+    "has_file_location": true/false,  // Do we have a specific file path and line number?
+    "file_path": "path/to/file.py or null",  // Extract from stack trace if available
+    "line_number": 123 or null,  // Extract from stack trace if available
+    "search_strategy": "What to search for in codebase if no file path",  // e.g., "Search for /v1/fault-ledger endpoint"
+    "search_keywords": ["keyword1", "keyword2"],  // Important terms to search for
+    "language": "Python/JavaScript/Java/etc or Unknown",
+    "severity": "critical/high/medium/low",
+    "needs_code": true/false,  // Do we need to fetch code from repository?
+    "metadata": {{}}  // Any additional context (API endpoint, HTTP method, field names, etc.)
+}}
+
+**Examples:**
+
+For a Python stack trace:
+{{
+    "error_type": "AttributeError",
+    "error_message": "'NoneType' object has no attribute 'job_id'",
+    "has_file_location": true,
+    "file_path": "backend/src/server/apis_v1/webhooks.py",
+    "line_number": 250,
+    "search_strategy": null,
+    "search_keywords": ["new_triage", "job_id"],
+    "language": "Python",
+    "severity": "high",
+    "needs_code": true,
+    "metadata": {{"function": "grafana_webhook"}}
+}}
+
+For an API error without stack trace:
+{{
+    "error_type": "HTTP422ValidationError",
+    "error_message": "configured_duration must be a valid number",
+    "has_file_location": false,
+    "file_path": null,
+    "line_number": null,
+    "search_strategy": "Search for /v1/fault-ledger POST endpoint definition and configured_duration field validation",
+    "search_keywords": ["fault-ledger", "configured_duration", "POST", "422"],
+    "language": "API",
+    "severity": "medium",
+    "needs_code": true,
+    "metadata": {{
+        "endpoint": "/v1/fault-ledger",
+        "method": "POST",
+        "status_code": 422,
+        "field": "configured_duration"
+    }}
+}}
+
+For a generic application log:
+{{
+    "error_type": "ApplicationError",
+    "error_message": "Service failed to start",
+    "has_file_location": false,
+    "file_path": null,
+    "line_number": null,
+    "search_strategy": "Search for service initialization and startup code",
+    "search_keywords": ["startup", "initialize", "service"],
+    "language": "Unknown",
+    "severity": "high",
+    "needs_code": false,
+    "metadata": {{}}
+}}
+
+Be intelligent about extracting information. Look for:
+- File paths in stack traces
+- Line numbers
+- API endpoints in URLs
+- HTTP status codes
+- Field names in validation errors
+- Function/method names
+- Error types and messages
+
+Respond ONLY with valid JSON, no additional text."""
+
+        try:
+            body = json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 2000,  # Smaller for JSON response
+                "temperature": 0.1,  # Low temperature for structured output
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            })
+
+            response = self.client.invoke_model(
+                modelId=self.model_id,
+                body=body
+            )
+
+            response_body = json.loads(response['body'].read())
+            json_text = response_body['content'][0]['text']
+
+            # Parse JSON response
+            # Remove markdown code blocks if present
+            json_text = json_text.strip()
+            if json_text.startswith('```'):
+                json_text = json_text.split('```')[1]
+                if json_text.startswith('json'):
+                    json_text = json_text[4:]
+            json_text = json_text.strip()
+
+            understanding_dict = json.loads(json_text)
+
+            # Convert to ErrorUnderstanding model
+            return ErrorUnderstanding(**understanding_dict)
+
+        except Exception as e:
+            print(f"Error in understand_error: {e}")
+            import traceback
+            traceback.print_exc()
+
+            # Fallback: return basic understanding
+            return ErrorUnderstanding(
+                error_type="UnknownError",
+                error_message="Failed to parse error",
+                has_file_location=False,
+                needs_code=False,
+                severity="medium"
+            )
 
         # Configure Bedrock client with timeouts
         bedrock_config = Config(

@@ -276,6 +276,55 @@ class GitHubMCPClient:
             traceback.print_exc()
             return None
     
+    def search_and_fetch(
+        self,
+        repository: str,
+        search_query: str,
+        keywords: Optional[list] = None
+    ) -> Optional[str]:
+        """
+        Search for code using keywords and fetch the most relevant result.
+
+        Args:
+            repository: Repository in format "owner/repo"
+            search_query: Natural language description of what to search for
+            keywords: List of keywords to search for
+
+        Returns:
+            Code content from the most relevant file, or None if not found
+        """
+        try:
+            print(f"   🔍 Searching codebase: {search_query}")
+
+            # Try searching with each keyword
+            all_keywords = keywords or []
+            if not all_keywords:
+                # Extract keywords from search query
+                all_keywords = [word for word in search_query.split() if len(word) > 3]
+
+            # Search with the most specific keyword first
+            for keyword in all_keywords[:3]:  # Try top 3 keywords
+                print(f"   Trying keyword: {keyword}")
+
+                search_result = self.search_code(repository, keyword)
+
+                if search_result:
+                    # For now, just return a message indicating search was attempted
+                    # In a full implementation, we'd parse search results and fetch the best match
+                    print(f"   ✓ Search completed for: {keyword}")
+                    # TODO: Parse search results and fetch the most relevant file
+                    break
+
+            # Fallback: Return None if search doesn't find anything
+            print(f"   ⚠️  Search-based code fetching not fully implemented yet")
+            print(f"   💡 Suggestion: Manually check these keywords in the codebase: {', '.join(all_keywords[:5])}")
+
+            return None
+
+        except Exception as e:
+            print(f"Error in search_and_fetch: {e}")
+            return None
+
     def close(self):
         """Close HTTP client."""
         self.client.close()

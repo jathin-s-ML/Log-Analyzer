@@ -1,8 +1,23 @@
 """Data models for Error Log Analyzer Agent."""
 
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
+
+
+class ErrorUnderstanding(BaseModel):
+    """LLM's understanding of the error - used for intelligent routing."""
+    error_type: str
+    error_message: str
+    has_file_location: bool = False
+    file_path: Optional[str] = None
+    line_number: Optional[int] = None
+    search_strategy: Optional[str] = None
+    search_keywords: List[str] = Field(default_factory=list)
+    language: Optional[str] = None
+    severity: str = "medium"
+    needs_code: bool = True
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class StackFrame(BaseModel):
