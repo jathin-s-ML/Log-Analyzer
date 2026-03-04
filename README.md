@@ -21,7 +21,7 @@ input.txt → Agent → GitHub MCP (readonly) → AWS Bedrock Claude → result.
 ### 1. Clone Repository
 
 ```bash
-cd code-triager
+cd Log-Analyzer
 ```
 
 ### 2. Create Virtual Environment
